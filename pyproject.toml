@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "skillpill"
+version = "0.1.0"
+description = "Distill classical agent skills into lightweight MLX LoRA adapters for local execution on Apple Silicon"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.6.0",
+  "openai>=1.30.0",
+  "instructor>=1.3.0"
+]
+
+[project.scripts]
+skillpill-extract = "skillpill.forge.extractor:main"
+skillpill-generate = "skillpill.forge.generator:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
