@@ -250,6 +250,25 @@ and saves them into a JSONL dataset.
 
 ---
 
+#### Format and validate a generated dataset
+
+```bash
+PYTHONPATH=src python -m skillpill.forge.formatter \
+  datasets/examples/github_skill_example.jsonl \
+  examples/github_skill_tool.py \
+  --readme examples/github_skill_README.md \
+  --function get_github_issue \
+  --output datasets/examples/github_skill_example.formatted.jsonl
+```
+
+This formatter step:
+
+- validates trajectory structure
+- checks tool-call arguments against the extracted schema
+- enforces standard vs missing-args vs negative-chat behavior
+- removes duplicate records by default
+- emits strict ChatML-style JSONL for downstream training
+
 ### Design Principles
 
 #### 1. AST first, runtime second
@@ -575,6 +594,25 @@ PYTHONPATH=src python -m skillpill.forge.generator \
 并保存为 JSONL 数据集。
 
 ---
+
+#### 格式化并校验生成后的数据集
+
+```bash
+PYTHONPATH=src python -m skillpill.forge.formatter \
+  datasets/examples/github_skill_example.jsonl \
+  examples/github_skill_tool.py \
+  --readme examples/github_skill_README.md \
+  --function get_github_issue \
+  --output datasets/examples/github_skill_example.formatted.jsonl
+```
+
+这个 formatter 步骤会：
+
+- 校验轨迹结构是否合法
+- 检查 tool call 参数是否匹配提取出的 schema
+- 强制区分 standard / missing-args / negative-chat 的行为边界
+- 默认去重
+- 输出适合下游训练的严格 ChatML JSONL
 
 ### 设计原则
 
