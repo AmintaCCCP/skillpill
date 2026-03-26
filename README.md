@@ -139,6 +139,19 @@ The repo also includes:
 
 ---
 
+### Included Example Dataset
+
+The repository now includes a concrete GitHub-style example under `examples/` and `datasets/examples/` so contributors can inspect a real generated dataset instead of guessing the intended format.
+
+Files to start with:
+
+- `examples/github_skill_tool.py`
+- `examples/github_skill_README.md`
+- `examples/github_skill_example.md`
+- `datasets/examples/github_skill_example.jsonl`
+
+---
+
 ### Project Structure
 
 ```text
@@ -449,6 +462,19 @@ Phase 1 叫 **Skill-Forge**，目标是把普通 Python 工具转成适合 LoRA 
 - CLI 入口
 - 一个天气工具示例
 - 一个 README 示例输入
+
+---
+
+### 仓库内置示例数据集
+
+现在仓库里已经带了一套真实生成出来的 GitHub 风格示例，放在 `examples/` 和 `datasets/examples/` 下面，方便贡献者直接看样本，而不是靠想象猜格式。
+
+建议先看这几个文件：
+
+- `examples/github_skill_tool.py`
+- `examples/github_skill_README.md`
+- `examples/github_skill_example.md`
+- `datasets/examples/github_skill_example.jsonl`
 
 ---
 

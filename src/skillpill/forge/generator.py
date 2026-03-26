@@ -6,18 +6,25 @@ import os
 from pathlib import Path
 from typing import Any
 
-import instructor
 from openai import OpenAI
+from pydantic import ValidationError
 
 from .extractor import SchemaExtractor
-from .models import ToolSchema, Trajectory, TrajectoryBatch, TrajectoryKind
+from .models import ChatMessage, Role, ToolCall, ToolSchema, Trajectory, TrajectoryBatch, TrajectoryKind
 from .prompts import base_context_prompt, missing_args_prompt, negative_chat_prompt, standard_prompt
 
 
 class TrajectoryGenerator:
-    def __init__(self, client: OpenAI | None = None, model: str = "gpt-4o-mini"):
-        raw_client = client or OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-        self.client = instructor.from_openai(raw_client)
+    def __init__(
+        self,
+        client: OpenAI | None = None,
+        model: str = "gpt-4o-mini",
+        api_key: str | None = None,
+        base_url: str | None = None,
+    ):
+        resolved_api_key = api_key or os.environ.get("OPENAI_API_KEY")
+        resolved_base_url = base_url or os.environ.get("OPENAI_BASE_URL")
+        self.client = client or OpenAI(api_key=resolved_api_key, base_url=resolved_base_url)
         self.model = model
 
     def generate(self, tool_schema: ToolSchema, count_per_kind: int = 3) -> list[Trajectory]:
@@ -55,17 +62,60 @@ class TrajectoryGenerator:
         expected_kind: TrajectoryKind,
     ) -> TrajectoryBatch:
         base_prompt = base_context_prompt(tool_schema.name, schema_json, tool_schema.readme_summary)
-        batch = self.client.chat.completions.create(
+        response = self.client.chat.completions.create(
             model=self.model,
-            response_model=TrajectoryBatch,
             messages=[
-                {"role": "system", "content": base_prompt},
+                {
+                    "role": "system",
+                    "content": (
+                        base_prompt
+                        + "\n\nReturn ONLY valid JSON with this shape: "
+                        + '{"trajectories":[{"kind":"standard|missing_args|negative_chat","messages":[{"role":"system|user|assistant|tool","content":"...","tool_call":{"name":"tool_name","arguments":{}}}] }]}'
+                        + "\nDo not use markdown fences. Do not add explanations outside JSON."
+                    ),
+                },
                 {"role": "user", "content": task_prompt},
             ],
+            response_format={"type": "json_object"},
         )
+        raw_text = self._extract_response_text(response)
+        batch = self._parse_batch(raw_text, expected_kind)
         for trajectory in batch.trajectories:
             trajectory.kind = expected_kind
         return batch
+
+    def _extract_response_text(self, response: Any) -> str:
+        choice = response.choices[0].message
+        if getattr(choice, "content", None):
+            return choice.content
+        tool_calls = getattr(choice, "tool_calls", None) or []
+        for tool_call in tool_calls:
+            function = getattr(tool_call, "function", None)
+            arguments = getattr(function, "arguments", None) if function else None
+            if arguments:
+                return arguments
+        raise ValueError("Model response did not include parseable JSON content")
+
+    def _parse_batch(self, raw_text: str, expected_kind: TrajectoryKind) -> TrajectoryBatch:
+        try:
+            payload = json.loads(raw_text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Model did not return valid JSON: {exc}\nRaw text: {raw_text[:500]}") from exc
+
+        trajectories_payload = payload.get("trajectories")
+        if not isinstance(trajectories_payload, list):
+            raise ValueError("Response JSON is missing a top-level 'trajectories' list")
+
+        normalized: list[dict[str, Any]] = []
+        for item in trajectories_payload:
+            if "kind" not in item:
+                item["kind"] = expected_kind.value
+            normalized.append(item)
+
+        try:
+            return TrajectoryBatch.model_validate({"trajectories": normalized})
+        except ValidationError as exc:
+            raise ValueError(f"Trajectory batch validation failed: {exc}") from exc
 
     def _validate_trajectory(self, tool_schema: ToolSchema, trajectory: Trajectory) -> None:
         properties = tool_schema.parameters.properties
@@ -133,12 +183,14 @@ def main() -> None:
     parser.add_argument("--model", default="gpt-4o-mini")
     parser.add_argument("--count", type=int, default=3, help="Trajectories per category")
     parser.add_argument("--output", help="Optional JSONL output path")
+    parser.add_argument("--api-key", dest="api_key")
+    parser.add_argument("--base-url", dest="base_url")
     args = parser.parse_args()
 
     extractor = SchemaExtractor(args.python_file, args.readme_file)
     schema = extractor.extract(args.function_name)
 
-    generator = TrajectoryGenerator(model=args.model)
+    generator = TrajectoryGenerator(model=args.model, api_key=args.api_key, base_url=args.base_url)
     trajectories = generator.generate(schema, count_per_kind=args.count)
 
     if args.output:
